@@ -11,7 +11,8 @@ import {colorFor, selectionFor, defineTheme, iconBtn} from '../utils/utils';
 
 
 export default function Room() {
-  const { code } = useParams()
+  const { code: rawCode } = useParams()
+  const code = rawCode.toUpperCase()
   const navigate = useNavigate()
 
   const [room, setRoom] = useState(null)

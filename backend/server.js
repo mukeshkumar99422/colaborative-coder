@@ -61,7 +61,7 @@ app.post('/api/rooms', (req, res) => {
   }
 
   const code = generateRoomCode()
-  const room = { code, name, language, createdAt: Date.now() }
+  const room = { code, name, language, createdAt: Date.now(), emptySince: Date.now() }
   rooms.set(code, room)
   res.status(201).json(room)
 })
@@ -78,6 +78,29 @@ app.get('/api/rooms/:code', (req, res) => {
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 })
+
+// ---------- Cleanup of empty rooms ----------
+const EMPTY_ROOM_TTL = 10 * 60 * 1000   // delete a room after 10 min with nobody in it
+const SWEEP_INTERVAL = 60 * 1000        // check every minute
+
+setInterval(async () => {
+  for (const [code, room] of rooms) {
+    const doc = ySocketIO.documents.get(code)
+    const connected = doc ? (await doc.namespace.allSockets()).size : 0
+
+    if (connected > 0) {
+      room.emptySince = null                         // someone is inside
+      continue
+    }
+    if (!room.emptySince) room.emptySince = Date.now() // just became empty
+
+    if (Date.now() - room.emptySince >= EMPTY_ROOM_TTL) {
+      if (doc) await doc.destroy()                   // free the Yjs document
+      rooms.delete(code)                             // free the room entry
+      console.log(`Deleted empty room ${code}`)
+    }
+  }
+}, SWEEP_INTERVAL)
 
 httpServer.listen(3000, () => {
   console.log('Server is running on port 3000')
